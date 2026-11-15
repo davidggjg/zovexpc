@@ -137,8 +137,12 @@ private fun humanSize(bytes: Long): String = when {
  * than imitating a shell that cannot run anything.
  */
 @Composable
-fun TerminalApp() {
+fun TerminalApp(runtimeRoot: java.io.File? = null, revision: Long = 0L) {
     val scheme = MaterialTheme.colorScheme
+    val installed = remember(revision) {
+        runtimeRoot != null &&
+            File(runtimeRoot, "windows-runtime/wine/bin/wine64").exists()
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -153,10 +157,14 @@ fun TerminalApp() {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "The Windows runtime is not installed yet.\n" +
-                "cmd.exe needs Wine and Box64, which arrive in stage 2.\n\n" +
-                "Nothing here is simulated: once the engine is in place,\n" +
-                "this window runs the real cmd.exe.",
+            text = if (installed) {
+                "Runtime installed: Wine 9.0 + Box64 are on disk.\n" +
+                    "Launching cmd.exe is the next step and is not wired up yet,\n" +
+                    "so this prompt still does nothing."
+            } else {
+                "The Windows runtime is not installed yet.\n" +
+                    "Open \"מנוע Windows\" from the Start menu to install it."
+            },
             color = Color(0xFF9A9A9A),
             fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
@@ -168,7 +176,7 @@ fun TerminalApp() {
         }
         Spacer(Modifier.weight(1f))
         Text(
-            text = "stage 1 · engine not installed",
+            text = if (installed) "runtime installed · launcher pending" else "engine not installed",
             color = scheme.outline,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,

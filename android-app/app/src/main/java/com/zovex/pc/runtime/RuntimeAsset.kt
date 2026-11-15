@@ -19,6 +19,10 @@ data class RuntimeAsset(
     val licence: String,
     /** Paths inside the archive that must be executable after extraction. */
     val executableDirs: List<String> = emptyList(),
+    /** A tarball inside the archive to unpack on the device, if any. */
+    val innerTarGz: String? = null,
+    /** Where that tarball is unpacked, relative to the install directory. */
+    val innerTarGzTarget: String = "rootfs",
 ) {
     init {
         require(sha256.length == 64) { "sha256 for $id must be 64 hex characters" }
@@ -26,7 +30,7 @@ data class RuntimeAsset(
     }
 }
 
-enum class InstallState { MISSING, DOWNLOADING, VERIFYING, EXTRACTING, READY, FAILED }
+enum class InstallState { MISSING, DOWNLOADING, VERIFYING, EXTRACTING, UNPACKING_ROOTFS, READY, FAILED }
 
 data class InstallProgress(
     val asset: RuntimeAsset,

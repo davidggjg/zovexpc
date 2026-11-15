@@ -12,7 +12,9 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -70,6 +72,22 @@ class RuntimeInstaller(private val root: File) {
             emit(InstallProgress(asset, InstallState.EXTRACTING, null, "מחלץ…"))
             work.deleteRecursively()
             extract(archive, work)
+
+            if (asset.innerTarGz != null) {
+                emit(
+                    InstallProgress(
+                        asset, InstallState.UNPACKING_ROOTFS, null,
+                        "פורס את מערכת הקבצים…",
+                    )
+                )
+                val tarball = File(work, asset.innerTarGz)
+                if (!tarball.isFile) throw IOException("חסר ${asset.innerTarGz} בחבילה")
+                extractTarGz(tarball, File(work, asset.innerTarGzTarget))
+                // The tarball is a copy of what is now on disk; keeping it
+                // would double the payload's footprint on the device.
+                tarball.delete()
+            }
+
             applyExecutableBits(asset, work)
 
             // Swap into place only once the payload is complete and verified,
@@ -162,6 +180,58 @@ class RuntimeInstaller(private val root: File) {
                 zip.closeEntry()
             }
         }
+    }
+
+    /**
+     * Unpacks the rootfs tarball, keeping the Unix modes it carries.
+     *
+     * Entries Android cannot create without root — device nodes, FIFOs,
+     * sockets — are skipped rather than failing the install; nothing in the
+     * runtime path needs them, and a missing /dev entry is better than no
+     * rootfs at all. Symlinks are kept, since the rootfs is full of them.
+     */
+    private suspend fun extractTarGz(tarball: File, target: File) {
+        target.mkdirs()
+        val canonicalTarget = target.canonicalPath
+        var skipped = 0
+
+        TarArchiveInputStream(GZIPInputStream(tarball.inputStream().buffered())).use { tar ->
+            while (true) {
+                coroutineContext.ensureActive()
+                val entry = tar.nextEntry ?: break
+                val out = File(target, entry.name)
+
+                if (!out.canonicalPath.startsWith(canonicalTarget + File.separator) &&
+                    out.canonicalPath != canonicalTarget
+                ) {
+                    throw IOException("ארכיון פגום: נתיב חורג (${entry.name})")
+                }
+
+                when {
+                    entry.isDirectory -> out.mkdirs()
+
+                    entry.isSymbolicLink -> {
+                        out.parentFile?.mkdirs()
+                        out.delete()
+                        runCatching {
+                            android.system.Os.symlink(entry.linkName, out.absolutePath)
+                        }.onFailure { skipped++ }
+                    }
+
+                    entry.isFile -> {
+                        out.parentFile?.mkdirs()
+                        out.outputStream().use { tar.copyTo(it) }
+                        val mode = entry.mode
+                        out.setReadable(true, false)
+                        out.setWritable(true, true)
+                        if (mode and 0b001_001_001 != 0) out.setExecutable(true, false)
+                    }
+
+                    else -> skipped++
+                }
+            }
+        }
+        Log.i(TAG, "Rootfs unpacked; skipped $skipped special entries")
     }
 
     /**

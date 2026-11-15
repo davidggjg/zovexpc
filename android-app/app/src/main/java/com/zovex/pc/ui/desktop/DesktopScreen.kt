@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Power
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.Icon
@@ -127,12 +128,20 @@ fun DesktopScreen() {
         }
     }
 
+    val runtimeRoot = remember { File(context.filesDir, "runtime").also { it.mkdirs() } }
+    var runtimeRevision by remember { mutableLongStateOf(0L) }
+
     val apps = remember(layout) {
         listOf(
+            AppEntry("Windows Runtime", Icons.Rounded.Memory, "מנוע Windows") {
+                RuntimeApp(runtimeRoot) { runtimeRevision++ }
+            },
             AppEntry("File Explorer", Icons.Rounded.Folder, "סייר הקבצים") {
                 FileExplorerApp(layout, contentRevision)
             },
-            AppEntry("Terminal", Icons.Rounded.Terminal, "טרמינל") { TerminalApp() },
+            AppEntry("Terminal", Icons.Rounded.Terminal, "טרמינל") {
+                TerminalApp(runtimeRoot, runtimeRevision)
+            },
             AppEntry("System", Icons.Rounded.Info, "מידע מערכת") { SystemInfoApp() },
         )
     }
