@@ -69,6 +69,15 @@ android {
         }
     }
 
+    lint {
+        // Lint fails the release build over targetSdk 28 because Play
+        // requires 33+. This app is distributed through GitHub, and 28 is
+        // what lets the runtime execute at all, so the Play floor does not
+        // apply. Revisit only if this is ever published to Play, which would
+        // mean finding another way to run binaries.
+        disable += "ExpiredTargetSdkVersion"
+    }
+
     buildFeatures { compose = true }
 
     compileOptions {
