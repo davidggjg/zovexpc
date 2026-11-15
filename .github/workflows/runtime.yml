@@ -1,0 +1,74 @@
+name: Build runtime payload
+
+# Heavy and slow, so it does not run on every push to the app. It runs when
+# this workflow or the runtime manifest changes, and on demand.
+on:
+  push:
+    paths:
+      - ".github/workflows/runtime.yml"
+      - "runtime/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  BOX64_REF: v0.3.4
+
+jobs:
+  box64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the aarch64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake ninja-build python3
+
+      - name: Fetch Box64
+        run: |
+          git clone --depth 1 --branch "$BOX64_REF" https://github.com/ptitSeb/box64.git box64-src
+          echo "Box64 at $(git -C box64-src rev-parse HEAD)"
+
+      # Built for aarch64 glibc, not for bionic: it runs inside the Linux
+      # rootfs, where Wine's x86_64 binaries live. Upstream documents the
+      # bionic build as experimental and unable to run Linux binaries, which
+      # is exactly what we need it to do.
+      - name: Configure and build
+        run: |
+          cmake -S box64-src -B box64-build -G Ninja \
+            -DARM64=1 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64
+          cmake --build box64-build --parallel
+
+      - name: Check what came out
+        run: |
+          find box64-build -maxdepth 1 -type f -name 'box64*' -print
+          file box64-build/box64
+          # Must be an aarch64 ELF; anything else means the cross build
+          # silently fell back to the host compiler.
+          file box64-build/box64 | grep -q 'ARM aarch64' \
+            || { echo "::error::box64 is not an aarch64 binary"; exit 1; }
+
+      - name: Package
+        run: |
+          mkdir -p payload/box64/bin
+          cp box64-build/box64 payload/box64/bin/
+          cp box64-src/LICENSE payload/box64/ 2>/dev/null || true
+          echo "$BOX64_REF" > payload/box64/VERSION
+          (cd payload && zip -r ../box64-aarch64.zip box64)
+          sha256sum box64-aarch64.zip | tee box64-aarch64.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: box64-aarch64
+          path: |
+            box64-aarch64.zip
+            box64-aarch64.zip.sha256
+          if-no-files-found: error
