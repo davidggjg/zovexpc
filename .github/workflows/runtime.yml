@@ -171,3 +171,62 @@ jobs:
             wine-x86_64.zip
             wine-x86_64.zip.sha256
           if-no-files-found: error
+
+  # Assembles the three components into the single payload the app installs.
+  payload:
+    needs: [box64, rootfs, wine]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: box64-aarch64, path: dl/box64 }
+      - uses: actions/download-artifact@v4
+        with: { name: ubuntu-base-arm64, path: dl/rootfs }
+      - uses: actions/download-artifact@v4
+        with: { name: wine-x86_64, path: dl/wine }
+
+      - name: Assemble
+        run: |
+          set -euo pipefail
+          mkdir -p tree
+          # The rootfs is the base; Box64 and Wine are laid into it at the
+          # paths the launcher will reference.
+          mkdir -p tree/rootfs
+          tar -xzf dl/rootfs/rootfs.tar.gz -C tree/rootfs
+          unzip -q dl/box64/box64-aarch64.zip -d tree
+          unzip -q dl/wine/wine-x86_64.zip -d tree
+          # ZIP drops permission bits, so the launcher restores them; record
+          # which trees hold binaries so it knows where to look.
+          cat > tree/MANIFEST <<'META'
+          rootfs=rootfs
+          box64=box64/bin/box64
+          wine=wine/bin/wine64
+          executable_dirs=box64/bin,wine/bin,rootfs/bin,rootfs/usr/bin,rootfs/sbin,rootfs/usr/sbin
+          META
+          du -sh tree/*
+
+      - name: Package and checksum
+        id: pack
+        run: |
+          set -euo pipefail
+          (cd tree && zip -qr ../zovex-runtime.zip .)
+          sum=$(sha256sum zovex-runtime.zip | cut -d' ' -f1)
+          size=$(stat -c%s zovex-runtime.zip)
+          echo "sha256=$sum" >> "$GITHUB_OUTPUT"
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+          ls -lh zovex-runtime.zip
+          echo "SHA-256: $sum"
+
+      # Published under a fixed tag so the app has one stable URL to fetch,
+      # with the digest it must match printed in the release body.
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: runtime-${{ github.run_number }}
+          name: ZOVEX runtime ${{ github.run_number }}
+          body: |
+            Wine 9.0 (x86_64) + Box64 (aarch64) + Ubuntu 24.04 base (arm64)
+
+            sha256: ${{ steps.pack.outputs.sha256 }}
+            bytes:  ${{ steps.pack.outputs.size }}
+          files: zovex-runtime.zip
+          make_latest: false
