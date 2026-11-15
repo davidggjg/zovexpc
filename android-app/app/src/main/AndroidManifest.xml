@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.hardware.vulkan.version"
+        android:version="0x401000" android:required="true" />
+    <uses-feature android:name="android.hardware.vulkan.level"
+        android:version="1" android:required="true" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application
+        android:label="ZOVEX PC"
+        android:theme="@style/Theme.ZovexPC"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        android:extractNativeLibs="true"
+        android:allowBackup="false"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".ui.ShellActivity"
+            android:exported="true"
+            android:screenOrientation="userLandscape"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density|smallestScreenSize|uiMode"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ARCHITECTURE DECISION 1: the Windows runtime lives in its own OS
+             process. A Wine or Box64 crash takes down :wine, never the shell UI.
+             This is deliberate and must not be collapsed into the main process. -->
+        <service
+            android:name=".runtime.RuntimeService"
+            android:process=":wine"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the Windows-compatible runtime and its processes alive while the desktop session is open." />
+        </service>
+    </application>
+</manifest>

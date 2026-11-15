@@ -1,0 +1,23 @@
+# Build
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Native / runtime payloads (never commit third-party binaries)
+android-app/app/src/main/assets/runtime/
+native-engine/wine/
+native-engine/box64/
+graphics/turnip/
+*.tzst
+*.so.bin
+
+# OS
+.DS_Store
