@@ -20,9 +20,14 @@ struct VulkanInfo {
 
 VulkanInfo probeVulkan();
 
-// Result of the Android W^X executable-mapping probe.
+// Result of the Android execution probes.
 struct ExecInfo {
+    // True only when a real execve() of a file in app storage succeeded.
+    // An executable *mapping* can be permitted while execve() is refused;
+    // measuring the mapping alone gives a false positive.
     bool ok = false;
+    bool mmapAllowed = false;
+    bool execveAllowed = false;
     std::string detail;
     std::string path;
 };

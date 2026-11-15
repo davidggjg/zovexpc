@@ -27,6 +27,14 @@ class VulkanReport {
 
 /** See the note on [VulkanReport] — same JNI field-filling contract. */
 class ExecReport {
+    /** True only when a real execve() from app storage succeeded. */
     @JvmField var ok: Boolean = false
+
+    /** An executable mapping was permitted. Not sufficient on its own. */
+    @JvmField var mmapAllowed: Boolean = false
+
+    /** execve() of a file in app storage was permitted. This is what counts. */
+    @JvmField var execveAllowed: Boolean = false
+
     @JvmField var detail: String = ""
 }

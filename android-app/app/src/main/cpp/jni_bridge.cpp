@@ -93,6 +93,8 @@ Java_com_zovex_pc_core_NativeBridge_nativeProbeExec(JNIEnv* env, jobject, jstrin
     jobject out = env->NewObject(cls, ctor);
 
     setBool(env, cls, out, "ok", info.ok);
+    setBool(env, cls, out, "mmapAllowed", info.mmapAllowed);
+    setBool(env, cls, out, "execveAllowed", info.execveAllowed);
     setStr(env, cls, out, "detail", info.detail);
 
     return out;

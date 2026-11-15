@@ -69,15 +69,21 @@ object DeviceCapabilityScanner {
             support = Support.NO,
             noteHe = "לא נבדק — מנוע ה-native לא נטען.",
         )
-        exec.ok -> Capability(
+        exec.execveAllowed -> Capability(
             titleHe = "הרצת קוד מהאחסון",
             support = Support.YES,
-            noteHe = "המכשיר מתיר מיפוי הרצה. Wine ירוץ ישירות, בלי proot.",
+            noteHe = "execve מהאחסון מותר. המנוע יכול להפעיל תהליכים.",
+        )
+        exec.mmapAllowed -> Capability(
+            titleHe = "הרצת קוד מהאחסון",
+            support = Support.NO,
+            noteHe = "מיפוי הרצה מותר אך execve חסום — ${exec.detail} " +
+                "בלי זה אי אפשר להפעיל את Wine או את Box64.",
         )
         else -> Capability(
             titleHe = "הרצת קוד מהאחסון",
-            support = Support.PARTIAL,
-            noteHe = "המכשיר חוסם מיפוי הרצה (W^X). נידרש למסלול proot, עם עלות ביצועים.",
+            support = Support.NO,
+            noteHe = "המכשיר חוסם הרצה מהאחסון. ${exec.detail}",
         )
     }
 

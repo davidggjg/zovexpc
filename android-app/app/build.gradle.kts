@@ -11,8 +11,13 @@ android {
 
     defaultConfig {
         applicationId = "com.zovex.pc"
-        minSdk = 29
-        targetSdk = 35
+        // Android 10 blocks executing files from the app's own directory, but
+        // only for apps that declare targetSdk 29 or higher. The whole
+        // runtime is executables in app storage, so 28 is the exemption this
+        // design depends on — the same reason Termux still targets 28.
+        // Distribution is via GitHub, not Play, so no store floor applies.
+        minSdk = 26
+        targetSdk = 28
         // CI passes the run number so every build is an upgrade over the last
         // one. Builds from a workstation stay at 1.
         versionCode = (project.findProperty("zovex.versionCode") as String?)?.toInt() ?: 1
