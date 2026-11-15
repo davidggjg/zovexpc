@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
+import com.zovex.pc.ui.desktop.DesktopScreen
 import com.zovex.pc.core.Capability
 import com.zovex.pc.core.DeviceCapabilityScanner
 import com.zovex.pc.core.DeviceProfile
@@ -66,7 +67,7 @@ class ShellActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.background,
                     ) {
                         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                            SystemCheckScreen()
+                            DesktopScreen()
                         }
                     }
                 }
