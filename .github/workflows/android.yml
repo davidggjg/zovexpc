@@ -66,7 +66,9 @@ jobs:
 
             Commit: ${{ github.sha }}
           files: ${{ steps.apk.outputs.path }}
-          prerelease: true
+          # Not a prerelease: GitHub excludes prereleases from
+          # /releases/latest, which is the one link meant to always work.
+          prerelease: false
           make_latest: true
 
       - name: Upload native build logs on failure
