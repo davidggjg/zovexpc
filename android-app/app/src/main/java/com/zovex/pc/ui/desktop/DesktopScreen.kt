@@ -130,6 +130,9 @@ fun DesktopScreen() {
 
     val runtimeRoot = remember { File(context.filesDir, "runtime").also { it.mkdirs() } }
     var runtimeRevision by remember { mutableLongStateOf(0L) }
+    // Set when a program is double-clicked in the Explorer; opens a Terminal
+    // already running it, which is how a desktop is expected to behave.
+    var pendingRun by remember { mutableStateOf<File?>(null) }
 
     val apps = remember(layout) {
         listOf(
@@ -137,7 +140,9 @@ fun DesktopScreen() {
                 RuntimeApp(runtimeRoot) { runtimeRevision++ }
             },
             AppEntry("File Explorer", Icons.Rounded.Folder, "סייר הקבצים") {
-                FileExplorerApp(layout, contentRevision)
+                FileExplorerApp(layout, contentRevision) { file ->
+                    pendingRun = file
+                }
             },
             AppEntry("Terminal", Icons.Rounded.Terminal, "טרמינל") {
                 TerminalApp(runtimeRoot, runtimeRevision)
@@ -191,6 +196,14 @@ fun DesktopScreen() {
                     .align(Alignment.BottomCenter)
                     .padding(bottom = TaskbarHeight + 10.dp),
             )
+        }
+
+        pendingRun?.let { file ->
+            val wineCmd = wineCommandFor(file)
+            desktop.open(file.name, Icons.Rounded.Terminal) {
+                TerminalApp(runtimeRoot, runtimeRevision, initialCommand = wineCmd)
+            }
+            pendingRun = null
         }
 
         Taskbar(desktop, Modifier.align(Alignment.BottomCenter))
@@ -453,4 +466,13 @@ private fun uniqueFile(dir: File, name: String): File {
         n++
     }
     return candidate
+}
+
+/**
+ * Wine is an x86_64 binary, so it runs under Box64, and both live inside the
+ * rootfs view that PRoot sets up at /zovex.
+ */
+private fun wineCommandFor(file: File): String {
+    val quoted = file.absolutePath.replace("'", "'\\''")
+    return "/zovex/box64/bin/box64 /zovex/wine/bin/wine64 '" + quoted + "'"
 }

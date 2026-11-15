@@ -50,7 +50,11 @@ import java.io.File
  * disk, so an empty C:\ looks empty rather than being faked with sample files.
  */
 @Composable
-fun FileExplorerApp(layout: PrefixLayout, revision: Long = 0L) {
+fun FileExplorerApp(
+    layout: PrefixLayout,
+    revision: Long = 0L,
+    onRunFile: (File) -> Unit = {},
+) {
     var notice by remember { mutableStateOf<String?>(null) }
     var current by remember { mutableStateOf(layout.driveC) }
     val scheme = MaterialTheme.colorScheme
@@ -121,6 +125,8 @@ fun FileExplorerApp(layout: PrefixLayout, revision: Long = 0L) {
                             .clickable {
                                 if (file.isDirectory) {
                                     current = file
+                                } else if (isRunnable(file)) {
+                                    onRunFile(file)
                                 } else {
                                     notice = describeFile(file)
                                 }
@@ -156,58 +162,6 @@ private fun humanSize(bytes: Long): String = when {
     bytes >= 1L shl 20 -> "%.1f MB".format(bytes.toDouble() / (1L shl 20))
     bytes >= 1024 -> "%.0f KB".format(bytes.toDouble() / 1024)
     else -> "$bytes B"
-}
-
-/**
- * The terminal window. It says plainly that no engine is installed rather
- * than imitating a shell that cannot run anything.
- */
-@Composable
-fun TerminalApp(runtimeRoot: java.io.File? = null, revision: Long = 0L) {
-    val scheme = MaterialTheme.colorScheme
-    val installed = remember(revision) {
-        runtimeRoot != null &&
-            File(runtimeRoot, "windows-runtime/wine/bin/wine64").exists()
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0C0C0C))
-            .padding(14.dp),
-    ) {
-        Text(
-            text = "ZOVEX Terminal",
-            color = Color(0xFFCCCCCC),
-            fontSize = 13.sp,
-            fontFamily = FontFamily.Monospace,
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = if (installed) {
-                "Runtime installed: Wine 9.0 + Box64 are on disk.\n" +
-                    "Launching cmd.exe is the next step and is not wired up yet,\n" +
-                    "so this prompt still does nothing."
-            } else {
-                "The Windows runtime is not installed yet.\n" +
-                    "Open \"מנוע Windows\" from the Start menu to install it."
-            },
-            color = Color(0xFF9A9A9A),
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
-        )
-        Spacer(Modifier.height(14.dp))
-        Row {
-            Text("C:\\> ", color = Color(0xFF16C60C), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-            Text("_", color = Color(0xFFCCCCCC), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-        }
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = if (installed) "runtime installed · launcher pending" else "engine not installed",
-            color = scheme.outline,
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-        )
-    }
 }
 
 /** The device report from stage 1, now living in a window. */
@@ -270,3 +224,6 @@ private fun describeFile(file: File): String {
             "${file.name} — ${file.length()} bytes. אין עדיין תוכנה משויכת לסוג הזה."
     }
 }
+
+private fun isRunnable(file: File): Boolean =
+    file.extension.lowercase() in setOf("exe", "msi", "bat", "cmd")

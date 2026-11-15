@@ -54,8 +54,64 @@ class RuntimeLauncher(private val installDir: File) {
     val rootfs: File get() = File(installDir, "rootfs")
     val box64: File get() = File(installDir, "box64/bin/box64")
     val wine: File get() = File(installDir, "wine/bin/wine64")
+    val proot: File get() = File(installDir, "proot/bin/proot")
+    private val prootLibs: File get() = File(installDir, "proot/lib")
 
-    val isInstalled: Boolean get() = rootfs.isDirectory && box64.isFile
+    val isInstalled: Boolean get() = rootfs.isDirectory && proot.isFile
+
+    /**
+     * Runs a command inside the rootfs under PRoot.
+     *
+     * PRoot is an Android-native (bionic) binary, so Android runs it happily;
+     * it then intercepts the traced process's syscalls, which is what lets a
+     * glibc program survive the seccomp filter. Direct execution was measured
+     * on device and is killed with SIGSYS, so this is the only path.
+     */
+    suspend fun runInProot(
+        command: List<String>,
+        timeoutSeconds: Long = 120,
+        extraEnv: Map<String, String> = emptyMap(),
+        workingDir: String = "/root",
+    ): ExecResult = withContext(Dispatchers.IO) {
+        if (!proot.isFile) {
+            return@withContext ExecResult(-1, "", "PRoot לא נמצא. התקן מחדש את המנוע.", 0)
+        }
+        if (!rootfs.isDirectory) {
+            return@withContext ExecResult(-1, "", "ה-rootfs לא נמצא.", 0)
+        }
+        proot.setExecutable(true, false)
+
+        val argv = buildList {
+            add(proot.absolutePath)
+            add("-r"); add(rootfs.absolutePath)
+            add("-0")                       // appear as root inside the rootfs
+            add("-w"); add(workingDir)
+            // Without /dev, /proc and /sys bound in, almost nothing starts.
+            add("-b"); add("/dev")
+            add("-b"); add("/proc")
+            add("-b"); add("/sys")
+            add("-b"); add("/dev/urandom:/dev/random")
+            // The Windows drive, so programs inside see the user's files.
+            add("-b"); add("${installDir.absolutePath}:/zovex")
+            add("--kill-on-exit")
+            addAll(command)
+        }
+
+        execute(
+            argv,
+            timeoutSeconds,
+            mapOf(
+                // Termux binaries look for their libraries at a Termux path
+                // that does not exist here.
+                "LD_LIBRARY_PATH" to prootLibs.absolutePath,
+                "PROOT_TMP_DIR" to File(installDir, "tmp").apply { mkdirs() }.absolutePath,
+                "PROOT_LOADER" to File(installDir, "proot/bin/loader").absolutePath,
+                "HOME" to "/root",
+                "PATH" to "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+                "TERM" to "xterm-256color",
+            ) + extraEnv,
+        )
+    }
 
     /** The rootfs's dynamic loader, or null when it cannot be found. */
     fun loader(): File? = LOADER_CANDIDATES
