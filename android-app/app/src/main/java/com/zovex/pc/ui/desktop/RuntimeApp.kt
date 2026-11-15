@@ -35,6 +35,9 @@ import com.zovex.pc.runtime.InstallProgress
 import com.zovex.pc.runtime.InstallState
 import com.zovex.pc.runtime.RuntimeCatalog
 import com.zovex.pc.runtime.RuntimeInstaller
+import com.zovex.pc.runtime.RuntimeLauncher
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.io.File
@@ -152,10 +155,101 @@ fun RuntimeApp(runtimeRoot: File, onInstalled: () -> Unit) {
             }
         }
 
+        if (progress.state == InstallState.READY) {
+            RuntimeDiagnostics(File(runtimeRoot, asset.id))
+        }
+
         Text(
             "ההורדה מאומתת מול SHA-256. חבילה שאינה תואמת נמחקת ולא מותקנת.",
             color = scheme.outline,
             fontSize = 11.sp,
         )
+    }
+}
+
+
+/**
+ * Runs a real binary out of the rootfs and prints exactly what came back.
+ *
+ * This is the experiment that decides the architecture: if the loader can
+ * start a glibc program here, the fast path holds and Wine follows. If it
+ * cannot, the error shown is the evidence for moving to PRoot.
+ */
+@Composable
+private fun RuntimeDiagnostics(installDir: File) {
+    val scheme = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    val launcher = remember(installDir) { RuntimeLauncher(installDir) }
+
+    var output by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (busy) scheme.surfaceVariant else scheme.surfaceVariant)
+                    .clickable(enabled = !busy) {
+                        busy = true
+                        output = "running…"
+                        scope.launch {
+                            val report = StringBuilder()
+                            val loader = launcher.loader()
+                            report.append("loader: ")
+                                .append(loader?.absolutePath ?: "NOT FOUND")
+                                .append('\n')
+
+                            if (loader != null) {
+                                val uname = launcher.runInRootfs("usr/bin/uname", listOf("-a"))
+                                report.append("\n$ uname -a  (exit ")
+                                    .append(uname.exitCode).append(", ")
+                                    .append(uname.durationMs).append("ms)\n")
+                                    .append(uname.combined.ifBlank { "(no output)" })
+                                    .append('\n')
+
+                                val ls = launcher.runInRootfs("usr/bin/ls", listOf("-1", "/"))
+                                report.append("\n$ ls -1 /  (exit ")
+                                    .append(ls.exitCode).append(")\n")
+                                    .append(ls.combined.take(400).ifBlank { "(no output)" })
+                                    .append('\n')
+                            }
+
+                            val box = launcher.runRaw(
+                                listOf(launcher.box64.absolutePath, "--version")
+                            )
+                            report.append("\n$ box64 --version  (exit ")
+                                .append(box.exitCode).append(")\n")
+                                .append(box.combined.ifBlank { "(no output)" })
+
+                            output = report.toString()
+                            busy = false
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+            ) {
+                Text("בדיקת מנוע", color = scheme.onSurface, fontSize = 13.sp)
+            }
+        }
+
+        if (output.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF0C0C0C))
+                    .verticalScroll(rememberScrollState())
+                    .padding(10.dp)
+            ) {
+                Text(
+                    output,
+                    color = Color(0xFFCCCCCC),
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+        }
     }
 }

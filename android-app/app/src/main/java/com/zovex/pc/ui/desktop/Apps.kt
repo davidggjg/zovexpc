@@ -48,6 +48,7 @@ import java.io.File
  */
 @Composable
 fun FileExplorerApp(layout: PrefixLayout, revision: Long = 0L) {
+    var notice by remember { mutableStateOf<String?>(null) }
     var current by remember { mutableStateOf(layout.driveC) }
     val scheme = MaterialTheme.colorScheme
 
@@ -88,6 +89,20 @@ fun FileExplorerApp(layout: PrefixLayout, revision: Long = 0L) {
             )
         }
 
+        notice?.let { text ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF3B3119))
+                    .clickable { notice = null }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text, color = Color(0xFFFFD98A), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text("✕", color = Color(0xFFFFD98A), fontSize = 12.sp)
+            }
+        }
+
         if (entries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("This folder is empty", color = scheme.onSurfaceVariant, fontSize = 13.sp)
@@ -98,7 +113,13 @@ fun FileExplorerApp(layout: PrefixLayout, revision: Long = 0L) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = file.isDirectory) { if (file.isDirectory) current = file }
+                            .clickable {
+                                if (file.isDirectory) {
+                                    current = file
+                                } else {
+                                    notice = describeFile(file)
+                                }
+                            }
                             .padding(horizontal = 12.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -224,5 +245,23 @@ fun SystemInfoApp() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Clicking a file used to do nothing at all, which reads as a broken app.
+ * Until the launcher is connected, say what the file is and why it cannot
+ * run yet.
+ */
+private fun describeFile(file: File): String {
+    val ext = file.extension.lowercase()
+    return when (ext) {
+        "exe", "msi", "bat", "cmd" ->
+            "${file.name} — להרצה נדרש מנוע Windows מחובר. המנוע מותקן אך המשגר " +
+                "עדיין לא מחובר, אז הקובץ לא ייפתח כרגע."
+        "zip", "7z", "rar" ->
+            "${file.name} — ארכיון. חילוץ מתוך הסביבה עוד לא נתמך."
+        else ->
+            "${file.name} — ${file.length()} bytes. אין עדיין תוכנה משויכת לסוג הזה."
     }
 }
