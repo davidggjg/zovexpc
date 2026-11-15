@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -98,10 +99,11 @@ fun WindowFrame(
                     },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = window.icon,
-                    modifier = Modifier.padding(start = 12.dp, end = 8.dp),
-                    fontSize = 15.sp,
+                Icon(
+                    imageVector = window.icon,
+                    contentDescription = null,
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 12.dp, end = 8.dp).size(17.dp),
                 )
                 Text(
                     text = window.title,

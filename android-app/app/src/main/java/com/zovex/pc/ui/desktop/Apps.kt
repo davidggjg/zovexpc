@@ -16,6 +16,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,11 +47,11 @@ import java.io.File
  * disk, so an empty C:\ looks empty rather than being faked with sample files.
  */
 @Composable
-fun FileExplorerApp(layout: PrefixLayout) {
+fun FileExplorerApp(layout: PrefixLayout, revision: Long = 0L) {
     var current by remember { mutableStateOf(layout.driveC) }
     val scheme = MaterialTheme.colorScheme
 
-    val entries = remember(current.path, current.lastModified()) {
+    val entries = remember(current.path, current.lastModified(), revision) {
         current.listFiles()
             ?.sortedWith(compareByDescending<File> { it.isDirectory }.thenBy { it.name.lowercase() })
             ?: emptyList()
@@ -67,7 +72,12 @@ fun FileExplorerApp(layout: PrefixLayout) {
                     .clickable(enabled = !atRoot) { current = current.parentFile ?: current },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("←", color = if (atRoot) scheme.outline else scheme.onSurface, fontSize = 17.sp)
+                Icon(
+                    Icons.Rounded.ArrowBack,
+                    contentDescription = "Back",
+                    tint = if (atRoot) scheme.outline else scheme.onSurface,
+                    modifier = Modifier.size(19.dp),
+                )
             }
             Spacer(Modifier.size(6.dp))
             Text(
@@ -92,7 +102,12 @@ fun FileExplorerApp(layout: PrefixLayout) {
                             .padding(horizontal = 12.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (file.isDirectory) "📁" else "📄", fontSize = 16.sp)
+                        Icon(
+                            if (file.isDirectory) Icons.Rounded.Folder else Icons.Rounded.Description,
+                            contentDescription = null,
+                            tint = if (file.isDirectory) Color(0xFFFFCB4D) else scheme.onSurfaceVariant,
+                            modifier = Modifier.size(19.dp),
+                        )
                         Spacer(Modifier.size(10.dp))
                         Text(file.name, color = scheme.onSurface, fontSize = 14.sp, modifier = Modifier.weight(1f))
                         if (file.isFile) {
