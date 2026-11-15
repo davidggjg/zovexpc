@@ -15,6 +15,7 @@ permissions:
 env:
   BOX64_REF: v0.3.4
   UBUNTU_RELEASE: "24.04"
+  WINE_REF: wine-9.0
 
 jobs:
   box64:
@@ -101,4 +102,72 @@ jobs:
         with:
           name: ubuntu-base-arm64
           path: rootfs.tar.gz
+          if-no-files-found: error
+
+  wine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ flex bison make pkg-config \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxinerama-dev libxcomposite-dev libxfixes-dev libxrender-dev \
+            libfreetype-dev libfontconfig1-dev libgl-dev libegl-dev \
+            libvulkan-dev libasound2-dev libpulse-dev libudev-dev \
+            libsdl2-dev libgnutls28-dev libxml2-dev libxslt1-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libusb-1.0-0-dev libkrb5-dev libcups2-dev libdbus-1-dev \
+            ocl-icd-opencl-dev libpcap-dev libsane-dev
+
+      - name: Fetch Wine
+        run: |
+          git clone --depth 1 --branch "$WINE_REF" https://gitlab.winehq.org/wine/wine.git wine-src
+          echo "Wine at $(git -C wine-src rev-parse HEAD)"
+
+      # Built for x86_64 Linux on an x86_64 runner: no cross-compilation.
+      # On the phone this is what Box64 translates, which is the whole point
+      # of the rootfs path.
+      - name: Configure
+        run: |
+          mkdir wine-build
+          cd wine-build
+          ../wine-src/configure \
+            --enable-win64 \
+            --prefix=/opt/wine \
+            --disable-tests \
+            --without-oss \
+            --with-x \
+            --with-vulkan \
+            --with-freetype
+          # configure warns rather than fails on missing optional parts, so
+          # surface them instead of discovering the gap on the device.
+          grep -A40 'you can still compile' config.log || true
+
+      - name: Build
+        run: make -C wine-build -j"$(nproc)"
+
+      - name: Install into a staging tree
+        run: |
+          make -C wine-build install DESTDIR="$PWD/stage"
+          du -sh stage/opt/wine
+          file stage/opt/wine/bin/wine64 || file stage/opt/wine/bin/wine
+
+      - name: Package
+        run: |
+          cp wine-src/LICENSE stage/opt/wine/ 2>/dev/null || true
+          echo "$WINE_REF" > stage/opt/wine/VERSION
+          (cd stage/opt && zip -qr "$GITHUB_WORKSPACE/wine-x86_64.zip" wine)
+          sha256sum wine-x86_64.zip | tee wine-x86_64.zip.sha256
+          ls -lh wine-x86_64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wine-x86_64
+          path: |
+            wine-x86_64.zip
+            wine-x86_64.zip.sha256
           if-no-files-found: error
