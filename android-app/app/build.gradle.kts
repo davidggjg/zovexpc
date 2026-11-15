@@ -13,8 +13,10 @@ android {
         applicationId = "com.zovex.pc"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-stage1"
+        // CI passes the run number so every build is an upgrade over the last
+        // one. Builds from a workstation stay at 1.
+        versionCode = (project.findProperty("zovex.versionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("zovex.versionName") as String?) ?: "0.1.0-dev"
 
         // Stage 1 target hardware: ARM64 only. Do not add armeabi-v7a —
         // Box64 requires a 64-bit host process.
@@ -35,11 +37,28 @@ android {
         }
     }
 
+    // One fixed key for every build, debug and release alike. Android refuses
+    // to install an update signed by a different key, so without this the user
+    // has to uninstall first and loses their whole C:\ drive. The key is in the
+    // repository on purpose: it protects nothing yet, and a lost key would mean
+    // no upgrade path for anyone already running the app. Replace it with a
+    // secret before any public release.
+    signingConfigs {
+        create("zovex") {
+            storeFile = rootProject.file("keystore/zovex-release.jks")
+            storePassword = "zovexpc"
+            keyAlias = "zovex"
+            keyPassword = "zovexpc"
+        }
+    }
+
     buildTypes {
         debug {
             isJniDebuggable = true
+            signingConfig = signingConfigs.getByName("zovex")
         }
         release {
+            signingConfig = signingConfigs.getByName("zovex")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

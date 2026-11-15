@@ -13,6 +13,8 @@
 
     <application
         android:label="ZOVEX PC"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.ZovexPC"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
@@ -23,7 +25,6 @@
         <activity
             android:name=".ui.ShellActivity"
             android:exported="true"
-            android:screenOrientation="userLandscape"
             android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density|smallestScreenSize|uiMode"
             android:launchMode="singleTask">

@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -63,7 +65,9 @@ class ShellActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background,
                     ) {
-                        SystemCheckScreen()
+                        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                            SystemCheckScreen()
+                        }
                     }
                 }
             }
@@ -96,11 +100,12 @@ private fun SystemCheckScreen() {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 24.dp),
     ) {
         Text(
             text = "ZOVEX PC",
-            fontSize = 34.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
         )
@@ -159,12 +164,13 @@ private fun KeyValue(key: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(
             text = key,
-            modifier = Modifier.width(110.dp),
+            modifier = Modifier.width(96.dp),
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = value,
+            modifier = Modifier.weight(1f),
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -184,12 +190,13 @@ private fun CapabilityRow(capability: Capability) {
     ) {
         Box(
             modifier = Modifier
+                .padding(top = 5.dp)
                 .size(10.dp)
                 .clip(CircleShape)
                 .background(capability.support.color()),
         )
         Spacer(Modifier.width(14.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             Text(
                 text = capability.titleHe,
                 fontSize = 15.sp,

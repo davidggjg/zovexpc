@@ -6,8 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  debug-apk:
+  apk:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,15 +29,45 @@ jobs:
           echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "ndk;27.2.12479018" "cmake;3.22.1"
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+      # The run number becomes the versionCode, so each build installs over the
+      # previous one instead of being refused as a downgrade.
+      - name: Build release APK
+        run: |
+          ./gradlew :app:assembleRelease --stacktrace \
+            -Pzovex.versionCode=${{ github.run_number }} \
+            -Pzovex.versionName=0.1.${{ github.run_number }}
 
-      - name: Upload APK
+      - name: Name the APK
+        id: apk
+        run: |
+          src=$(find android-app/app/build/outputs/apk/release -name '*.apk' | head -1)
+          cp "$src" "zovex-pc-0.1.${{ github.run_number }}.apk"
+          echo "path=zovex-pc-0.1.${{ github.run_number }}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zovex-pc-debug
-          path: android-app/app/build/outputs/apk/debug/*.apk
+          name: zovex-pc-apk
+          path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
+
+      # Publishes to the same /releases/latest URL every time, so installing an
+      # update is one download — no uninstall, since the signing key is fixed.
+      - name: Publish release
+        if: github.ref == 'refs/heads/ccr-d6b268ab-gl5m74' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: ZOVEX PC 0.1.${{ github.run_number }}
+          body: |
+            התקנה: להוריד את ה-APK ולפתוח אותו. אין צורך למחוק את הגרסה
+            הקודמת — כל הבנייה חתומה באותו מפתח, אז ההתקנה היא עדכון
+            והסביבה נשמרת.
+
+            Commit: ${{ github.sha }}
+          files: ${{ steps.apk.outputs.path }}
+          prerelease: true
+          make_latest: true
 
       - name: Upload native build logs on failure
         if: failure()

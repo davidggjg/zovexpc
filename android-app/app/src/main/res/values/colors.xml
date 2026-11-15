@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Taken from the backdrop of the ZOVEX PC artwork, so the adaptive icon
+         background matches the logo it sits behind. -->
+    <color name="ic_launcher_background">#000213</color>
+</resources>
