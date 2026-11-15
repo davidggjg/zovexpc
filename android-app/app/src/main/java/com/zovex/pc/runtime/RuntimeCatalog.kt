@@ -12,12 +12,12 @@ object RuntimeCatalog {
     val WINDOWS_RUNTIME = RuntimeAsset(
         id = "windows-runtime",
         displayNameHe = "מנוע Windows",
-        version = "runtime-5",
-        url = "https://github.com/davidggjg/zovexpc/releases/download/runtime-5/zovex-runtime.zip",
-        sha256 = "cc17f36a5088006ae2860ee3597e06bdb12456eb2241743080ce73d40e0d6325",
-        sizeBytes = 126_590_417,
-        licence = "Wine (LGPL-2.1), Box64 (MIT), Ubuntu base (various)",
-        executableDirs = listOf("box64/bin", "wine/bin"),
+        version = "runtime-6",
+        url = "https://github.com/davidggjg/zovexpc/releases/download/runtime-6/zovex-runtime.zip",
+        sha256 = "3a080021aed63457d42edfde0cfa58835a86144a72691f7021987cde68c55069",
+        sizeBytes = 126_719_716,
+        licence = "Wine (LGPL-2.1), Box64 (MIT), PRoot (GPL-2.0), Ubuntu base (various)",
+        executableDirs = listOf("box64/bin", "wine/bin", "proot/bin"),
         // Unpacked on the device: a Linux rootfs carries modes and special
         // files that ZIP cannot represent.
         innerTarGz = "rootfs.tar.gz",
