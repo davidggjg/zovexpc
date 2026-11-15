@@ -66,7 +66,10 @@ fun RuntimeApp(runtimeRoot: File, onInstalled: () -> Unit) {
     var running by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(18.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("Windows Runtime", color = scheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
@@ -118,7 +121,7 @@ fun RuntimeApp(runtimeRoot: File, onInstalled: () -> Unit) {
             )
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(4.dp))
 
         if (progress.state != InstallState.READY) {
             Box(
@@ -237,10 +240,8 @@ private fun RuntimeDiagnostics(installDir: File) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(Color(0xFF0C0C0C))
-                    .verticalScroll(rememberScrollState())
                     .padding(10.dp)
             ) {
                 Text(

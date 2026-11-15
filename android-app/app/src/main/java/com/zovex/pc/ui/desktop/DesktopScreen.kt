@@ -149,6 +149,8 @@ fun DesktopScreen() {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val workHeight = maxHeight - TaskbarHeight
         val workWidth = maxWidth
+        desktop.workWidth = workWidth
+        desktop.workHeight = workHeight
 
         BloomWallpaper(
             Modifier

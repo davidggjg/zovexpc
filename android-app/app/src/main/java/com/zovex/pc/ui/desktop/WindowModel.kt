@@ -42,6 +42,10 @@ class DesktopState {
 
     var startMenuOpen by mutableStateOf(false)
 
+    /** The desktop area, so new windows cannot open larger than the screen. */
+    var workWidth by mutableStateOf(0.dp)
+    var workHeight by mutableStateOf(0.dp)
+
     fun open(
         title: String,
         icon: ImageVector,
@@ -57,15 +61,25 @@ class DesktopState {
             focus(existing)
             return
         }
-        val offset = (windows.size % 5) * 24
+        // On a phone the default size is wider than the screen, which put
+        // the window's own controls out of reach.
+        val availableW = if (workWidth > 0.dp) workWidth else width
+        val availableH = if (workHeight > 0.dp) workHeight else height
+        val w0 = minOf(width, availableW - 16.dp).coerceAtLeast(240.dp)
+        val h0 = minOf(height, availableH - 16.dp).coerceAtLeast(160.dp)
+
+        val offset = (windows.size % 4) * 20
+        val x0 = minOf(offset.dp + 12.dp, (availableW - w0).coerceAtLeast(0.dp))
+        val y0 = minOf(offset.dp + 12.dp, (availableH - h0).coerceAtLeast(0.dp))
+
         val w = WindowState(
             id = nextId++,
             title = title,
             icon = icon,
-            x = (40 + offset).dp,
-            y = (40 + offset).dp,
-            width = width,
-            height = height,
+            x = x0,
+            y = y0,
+            width = w0,
+            height = h0,
             content = content,
         )
         windows.add(w)
