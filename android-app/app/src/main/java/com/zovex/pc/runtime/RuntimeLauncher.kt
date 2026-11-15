@@ -13,6 +13,20 @@ data class ExecResult(
     val durationMs: Long,
 ) {
     val ok: Boolean get() = exitCode == 0
+
+    /** The signal that killed the process, if one did. */
+    val killedBy: String?
+        get() = if (exitCode > 128 && exitCode < 160) {
+            val n = exitCode - 128
+            "signal $n" + when (n) {
+                4 -> " (SIGILL)"
+                6 -> " (SIGABRT)"
+                7 -> " (SIGBUS)"
+                11 -> " (SIGSEGV)"
+                31 -> " (SIGSYS — a syscall the Android seccomp filter forbids)"
+                else -> ""
+            }
+        } else null
     val combined: String get() = buildString {
         if (stdout.isNotBlank()) append(stdout)
         if (stderr.isNotBlank()) {
@@ -61,6 +75,7 @@ class RuntimeLauncher(private val installDir: File) {
         relativeBinary: String,
         args: List<String> = emptyList(),
         timeoutSeconds: Long = 30,
+        extraEnv: Map<String, String> = emptyMap(),
     ): ExecResult = withContext(Dispatchers.IO) {
         val loader = loader()
             ?: return@withContext ExecResult(
@@ -87,14 +102,46 @@ class RuntimeLauncher(private val installDir: File) {
             addAll(args)
         }
 
-        execute(command, timeoutSeconds)
+        execute(command, timeoutSeconds, extraEnv)
+    }
+
+    /**
+     * Runs Box64, which is itself an aarch64 glibc binary: its ELF
+     * interpreter does not exist on Android, so executing it directly fails
+     * with ENOENT. It goes through the rootfs loader like everything else.
+     */
+    suspend fun runBox64(
+        args: List<String>,
+        timeoutSeconds: Long = 60,
+        extraEnv: Map<String, String> = emptyMap(),
+    ): ExecResult = withContext(Dispatchers.IO) {
+        val loader = loader()
+            ?: return@withContext ExecResult(-1, "", "לא נמצא loader ב-rootfs.", 0)
+        if (!box64.isFile) {
+            return@withContext ExecResult(-1, "", "לא נמצא ${box64.absolutePath}", 0)
+        }
+        loader.setExecutable(true, false)
+        box64.setExecutable(true, false)
+
+        execute(
+            listOf(loader.absolutePath, "--library-path", libraryPath(), box64.absolutePath) + args,
+            timeoutSeconds,
+            extraEnv,
+        )
     }
 
     /** Runs an arbitrary command with no rootfs wrapping. */
-    suspend fun runRaw(command: List<String>, timeoutSeconds: Long = 30): ExecResult =
-        withContext(Dispatchers.IO) { execute(command, timeoutSeconds) }
+    suspend fun runRaw(
+        command: List<String>,
+        timeoutSeconds: Long = 30,
+        extraEnv: Map<String, String> = emptyMap(),
+    ): ExecResult = withContext(Dispatchers.IO) { execute(command, timeoutSeconds, extraEnv) }
 
-    private fun execute(command: List<String>, timeoutSeconds: Long): ExecResult {
+    private fun execute(
+        command: List<String>,
+        timeoutSeconds: Long,
+        extraEnv: Map<String, String> = emptyMap(),
+    ): ExecResult {
         val started = System.currentTimeMillis()
         return try {
             val process = ProcessBuilder(command)
@@ -103,6 +150,7 @@ class RuntimeLauncher(private val installDir: File) {
                     environment()["HOME"] = File(rootfs, "root").absolutePath
                     environment()["TMPDIR"] = File(installDir, "tmp").apply { mkdirs() }.absolutePath
                     environment()["PATH"] = "/usr/bin:/bin"
+                    environment().putAll(extraEnv)
                 }
                 .start()
 

@@ -203,27 +203,49 @@ private fun RuntimeDiagnostics(installDir: File) {
                                 .append(loader?.absolutePath ?: "NOT FOUND")
                                 .append('\n')
 
-                            if (loader != null) {
-                                val uname = launcher.runInRootfs("usr/bin/uname", listOf("-a"))
-                                report.append("\n$ uname -a  (exit ")
-                                    .append(uname.exitCode).append(", ")
-                                    .append(uname.durationMs).append("ms)\n")
-                                    .append(uname.combined.ifBlank { "(no output)" })
-                                    .append('\n')
+                            // The same binary under different environments.
+                            // The exit codes say which syscall mitigation, if
+                            // any, gets a glibc process past Android's
+                            // seccomp filter — measured rather than guessed.
+                            val trials = listOf(
+                                "baseline" to emptyMap<String, String>(),
+                                "rseq off" to mapOf(
+                                    "GLIBC_TUNABLES" to "glibc.pthread.rseq=0"
+                                ),
+                                "rseq off + no hwcaps" to mapOf(
+                                    "GLIBC_TUNABLES" to
+                                        "glibc.pthread.rseq=0:glibc.cpu.hwcaps=-ALL"
+                                ),
+                                "single thread hint" to mapOf(
+                                    "GLIBC_TUNABLES" to "glibc.pthread.rseq=0",
+                                    "LD_BIND_NOW" to "1",
+                                    "MALLOC_ARENA_MAX" to "1"
+                                ),
+                            )
 
-                                val ls = launcher.runInRootfs("usr/bin/ls", listOf("-1", "/"))
-                                report.append("\n$ ls -1 /  (exit ")
-                                    .append(ls.exitCode).append(")\n")
-                                    .append(ls.combined.take(400).ifBlank { "(no output)" })
-                                    .append('\n')
+                            if (loader != null) {
+                                for ((label, env) in trials) {
+                                    val r = launcher.runInRootfs(
+                                        "usr/bin/uname", listOf("-a"), extraEnv = env
+                                    )
+                                    report.append("\n[").append(label).append("] exit ")
+                                        .append(r.exitCode)
+                                    r.killedBy?.let { report.append(" — killed by ").append(it) }
+                                    report.append(" (").append(r.durationMs).append("ms)\n")
+                                    report.append(r.combined.trim().ifBlank { "(no output)" })
+                                        .append('\n')
+                                    if (r.ok) {
+                                        report.append(">>> this configuration works\n")
+                                        break
+                                    }
+                                }
                             }
 
-                            val box = launcher.runRaw(
-                                listOf(launcher.box64.absolutePath, "--version")
-                            )
-                            report.append("\n$ box64 --version  (exit ")
-                                .append(box.exitCode).append(")\n")
-                                .append(box.combined.ifBlank { "(no output)" })
+                            val box = launcher.runBox64(listOf("--version"))
+                            report.append("\n[box64 via loader] exit ").append(box.exitCode)
+                            box.killedBy?.let { report.append(" — killed by ").append(it) }
+                            report.append('\n')
+                                .append(box.combined.trim().take(300).ifBlank { "(no output)" })
 
                             output = report.toString()
                             busy = false
