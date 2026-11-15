@@ -24,7 +24,7 @@ class PrefixLayout(val root: File) {
     val temp: File get() = File(driveC, "Temp")
     val games: File get() = File(driveC, "Games")
 
-    val userHome: File get() = File(driveC, "users/$USER_NAME")
+    val userHome: File get() = File(driveC, "Users/$USER_NAME")
     val desktop: File get() = File(userHome, "Desktop")
     val downloads: File get() = File(userHome, "Downloads")
     val documents: File get() = File(userHome, "Documents")
@@ -46,6 +46,8 @@ class PrefixLayout(val root: File) {
      * Downloads target exist even before the runtime has ever started.
      */
     fun create(): Result<Unit> = runCatching {
+        migrateLowercaseUsers()
+
         val required = listOf(
             driveC, programFiles, programFilesX86, windows, temp, games,
             userHome, desktop, downloads, documents, pictures,
@@ -55,6 +57,21 @@ class PrefixLayout(val root: File) {
             if (!dir.isDirectory && !dir.mkdirs()) {
                 error("Cannot create ${dir.absolutePath}")
             }
+        }
+    }
+
+    /**
+     * Earlier builds created `drive_c/users`. Android's filesystem is
+     * case-sensitive, so after the rename to `Users` anything already
+     * imported would simply stop being visible. Move it rather than
+     * stranding the user's files.
+     */
+    private fun migrateLowercaseUsers() {
+        val old = File(driveC, "users")
+        val new = File(driveC, "Users")
+        if (!old.isDirectory || new.exists()) return
+        if (!old.renameTo(new)) {
+            android.util.Log.w("ZovexPrefix", "Could not migrate ${old.path} to ${new.path}")
         }
     }
 
