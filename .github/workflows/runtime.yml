@@ -172,9 +172,59 @@ jobs:
             wine-x86_64.zip.sha256
           if-no-files-found: error
 
-  # Assembles the three components into the single payload the app installs.
+  # PRoot intercepts syscalls so a glibc process survives Android's seccomp
+  # filter. Measured on device: direct execution of rootfs binaries is killed
+  # with SIGSYS under every environment tried, so this is not optional.
+  #
+  # Termux's build is used rather than our own: it is built against bionic,
+  # is the build the whole ecosystem relies on for exactly this, and
+  # rebuilding it would mean cross-compiling talloc as well for no gain.
+  proot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch proot and libtalloc for aarch64
+        run: |
+          set -euo pipefail
+          base="https://packages.termux.dev/apt/termux-main"
+          curl -fsSL "$base/dists/stable/main/binary-aarch64/Packages" -o Packages
+          mkdir -p debs out
+
+          for pkg in proot libtalloc; do
+            # Resolve the current filename from the index: these are
+            # versioned and pinning a name would 404 on the next release.
+            path=$(awk -v p="$pkg" '
+              $1=="Package:" { cur=$2 }
+              $1=="Filename:" && cur==p { print $2 }
+            ' Packages | tail -1)
+            test -n "$path" || { echo "::error::$pkg not found in the index"; exit 1; }
+            echo "$pkg -> $path"
+            curl -fsSL "$base/$path" -o "debs/$pkg.deb"
+            dpkg-deb -x "debs/$pkg.deb" out
+          done
+
+          find out -type f \( -name 'proot' -o -name 'libtalloc*' \) -print
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p payload/proot/bin payload/proot/lib
+          cp "$(find out -type f -name proot | head -1)" payload/proot/bin/
+          find out -type f -name 'libtalloc.so*' -exec cp -P {} payload/proot/lib/ \;
+          # Termux binaries look for their libraries under /data/data/com.termux,
+          # so the launcher sets LD_LIBRARY_PATH to the directory above instead.
+          ls -lR payload/proot
+          (cd payload && zip -qr ../proot-aarch64.zip proot)
+          sha256sum proot-aarch64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proot-aarch64
+          path: proot-aarch64.zip
+          if-no-files-found: error
+
+  # Assembles the components into the single payload the app installs.
   payload:
-    needs: [box64, rootfs, wine]
+    needs: [box64, rootfs, wine, proot]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -183,6 +233,8 @@ jobs:
         with: { name: ubuntu-base-arm64, path: dl/rootfs }
       - uses: actions/download-artifact@v4
         with: { name: wine-x86_64, path: dl/wine }
+      - uses: actions/download-artifact@v4
+        with: { name: proot-aarch64, path: dl/proot }
 
       - name: Assemble
         run: |
@@ -195,11 +247,13 @@ jobs:
           cp dl/rootfs/rootfs.tar.gz tree/rootfs.tar.gz
           unzip -q dl/box64/box64-aarch64.zip -d tree
           unzip -q dl/wine/wine-x86_64.zip -d tree
+          unzip -q dl/proot/proot-aarch64.zip -d tree
           printf '%s\n' \
             'rootfs_archive=rootfs.tar.gz' \
             'box64=box64/bin/box64' \
             'wine=wine/bin/wine64' \
-            'executable_dirs=box64/bin,wine/bin' > tree/MANIFEST
+            'proot=proot/bin/proot' \
+            'executable_dirs=box64/bin,wine/bin,proot/bin' > tree/MANIFEST
           du -sh tree/*
 
       - name: Package and checksum
