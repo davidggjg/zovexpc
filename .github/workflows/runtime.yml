@@ -188,20 +188,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p tree
-          # The rootfs is the base; Box64 and Wine are laid into it at the
-          # paths the launcher will reference.
-          mkdir -p tree/rootfs
-          tar -xzf dl/rootfs/rootfs.tar.gz -C tree/rootfs
+          # The rootfs stays a tarball inside the payload and is unpacked on
+          # the device. A Linux rootfs holds device nodes, sockets and
+          # root-owned modes that ZIP cannot represent at all, so unpacking it
+          # here would quietly lose them.
+          cp dl/rootfs/rootfs.tar.gz tree/rootfs.tar.gz
           unzip -q dl/box64/box64-aarch64.zip -d tree
           unzip -q dl/wine/wine-x86_64.zip -d tree
-          # ZIP drops permission bits, so the launcher restores them; record
-          # which trees hold binaries so it knows where to look.
-          cat > tree/MANIFEST <<'META'
-          rootfs=rootfs
-          box64=box64/bin/box64
-          wine=wine/bin/wine64
-          executable_dirs=box64/bin,wine/bin,rootfs/bin,rootfs/usr/bin,rootfs/sbin,rootfs/usr/sbin
-          META
+          printf '%s\n' \
+            'rootfs_archive=rootfs.tar.gz' \
+            'box64=box64/bin/box64' \
+            'wine=wine/bin/wine64' \
+            'executable_dirs=box64/bin,wine/bin' > tree/MANIFEST
           du -sh tree/*
 
       - name: Package and checksum
