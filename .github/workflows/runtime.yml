@@ -209,7 +209,19 @@ jobs:
           set -euo pipefail
           mkdir -p payload/proot/bin payload/proot/lib
           cp "$(find out -type f -name proot | head -1)" payload/proot/bin/
-          find out -type f -name 'libtalloc.so*' -exec cp -P {} payload/proot/lib/ \;
+
+          # Termux ships libtalloc.so.2 as a symlink to the versioned file.
+          # ZIP cannot carry symlinks and the on-device extractor writes them
+          # as ordinary files, which is why the loader reported the library
+          # missing. Copy the real file under every name the linker may ask
+          # for, dereferencing as we go.
+          real=$(find out -name 'libtalloc.so.*' -type f | sort | tail -1)
+          test -n "$real" || { echo "::error::libtalloc not found in the package"; exit 1; }
+          cp -L "$real" payload/proot/lib/libtalloc.so.2
+          cp -L "$real" payload/proot/lib/"$(basename "$real")"
+          # A symlink here would have zero size; fail rather than ship that.
+          test -s payload/proot/lib/libtalloc.so.2 || { echo "::error::libtalloc is empty"; exit 1; }
+          file payload/proot/lib/libtalloc.so.2
           # Termux binaries look for their libraries under /data/data/com.termux,
           # so the launcher sets LD_LIBRARY_PATH to the directory above instead.
           ls -lR payload/proot
