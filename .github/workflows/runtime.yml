@@ -182,49 +182,101 @@ jobs:
   proot:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch proot and libtalloc for aarch64
+      - name: Fetch proot and every library it needs
         run: |
           set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq binutils
           base="https://packages.termux.dev/apt/termux-main"
           curl -fsSL "$base/dists/stable/main/binary-aarch64/Packages" -o Packages
-          mkdir -p debs out
+          mkdir -p debs out payload/proot/bin payload/proot/lib
 
-          for pkg in proot libtalloc; do
-            # Resolve the current filename from the index: these are
-            # versioned and pinning a name would 404 on the next release.
+          fetch_pkg() {
+            local pkg="$1"
+            [ -f "debs/$pkg.deb" ] && return 0
+            local path
             path=$(awk -v p="$pkg" '
               $1=="Package:" { cur=$2 }
               $1=="Filename:" && cur==p { print $2 }
             ' Packages | tail -1)
-            test -n "$path" || { echo "::error::$pkg not found in the index"; exit 1; }
-            echo "$pkg -> $path"
+            if [ -z "$path" ]; then return 1; fi
+            echo "  fetching $pkg"
             curl -fsSL "$base/$path" -o "debs/$pkg.deb"
             dpkg-deb -x "debs/$pkg.deb" out
+          }
+
+          # Which Termux package provides a given soname. Resolved from the
+          # repository rather than hard-coded where the name makes it obvious.
+          pkg_for_lib() {
+            case "$1" in
+              libtalloc.so*)        echo libtalloc ;;
+              libandroid-shmem.so*) echo libandroid-shmem ;;
+              libandroid-support*)  echo libandroid-support ;;
+              libiconv.so*)         echo libiconv ;;
+              libintl.so*)          echo libintl ;;
+              *) echo "" ;;
+            esac
+          }
+
+          # Provided by Android itself; never bundled.
+          is_system_lib() {
+            case "$1" in
+              libc.so|libdl.so|libm.so|liblog.so|libstdc++.so|libz.so|\
+              libandroid.so|libEGL.so|libGLESv2.so|libvulkan.so|ld-android.so)
+                return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          fetch_pkg proot
+
+          # Walk the dependency graph instead of discovering one missing
+          # library per device test. Anything unresolved fails the build here.
+          queue=("$(find out -type f -name proot | head -1)")
+          seen=""
+          missing=""
+          while [ ${#queue[@]} -gt 0 ]; do
+            item="${queue[0]}"; queue=("${queue[@]:1}")
+            [ -f "$item" ] || continue
+            for need in $(readelf -d "$item" 2>/dev/null \
+                          | awk -F'[][]' '/NEEDED/ {print $2}'); do
+              case " $seen " in *" $need "*) continue ;; esac
+              seen="$seen $need"
+              if is_system_lib "$need"; then
+                echo "  $need: provided by Android"
+                continue
+              fi
+              pkg=$(pkg_for_lib "$need")
+              if [ -z "$pkg" ] || ! fetch_pkg "$pkg"; then
+                missing="$missing $need"
+                continue
+              fi
+              # Copy the real file, dereferenced: ZIP cannot carry symlinks
+              # and the on-device extractor writes them as ordinary files.
+              src=$(find out -name "$need" -o -name "$need.*" | head -1)
+              if [ -z "$src" ]; then missing="$missing $need"; continue; fi
+              real=$(readlink -f "$src")
+              cp -L "$real" "payload/proot/lib/$need"
+              test -s "payload/proot/lib/$need" || { echo "::error::$need is empty"; exit 1; }
+              echo "  $need: bundled"
+              queue+=("payload/proot/lib/$need")
+            done
           done
 
-          find out -type f \( -name 'proot' -o -name 'libtalloc*' \) -print
+          if [ -n "$missing" ]; then
+            echo "::error::unresolved libraries:$missing"
+            exit 1
+          fi
+
+          cp "$(find out -type f -name proot | head -1)" payload/proot/bin/
+          # PRoot needs its loader helpers beside it.
+          find out -type f \( -name 'loader' -o -name 'loader32' \) \
+            -exec cp {} payload/proot/bin/ \; || true
+
+          echo "--- payload:"; ls -lR payload/proot
 
       - name: Package
         run: |
           set -euo pipefail
-          mkdir -p payload/proot/bin payload/proot/lib
-          cp "$(find out -type f -name proot | head -1)" payload/proot/bin/
-
-          # Termux ships libtalloc.so.2 as a symlink to the versioned file.
-          # ZIP cannot carry symlinks and the on-device extractor writes them
-          # as ordinary files, which is why the loader reported the library
-          # missing. Copy the real file under every name the linker may ask
-          # for, dereferencing as we go.
-          real=$(find out -name 'libtalloc.so.*' -type f | sort | tail -1)
-          test -n "$real" || { echo "::error::libtalloc not found in the package"; exit 1; }
-          cp -L "$real" payload/proot/lib/libtalloc.so.2
-          cp -L "$real" payload/proot/lib/"$(basename "$real")"
-          # A symlink here would have zero size; fail rather than ship that.
-          test -s payload/proot/lib/libtalloc.so.2 || { echo "::error::libtalloc is empty"; exit 1; }
-          file payload/proot/lib/libtalloc.so.2
-          # Termux binaries look for their libraries under /data/data/com.termux,
-          # so the launcher sets LD_LIBRARY_PATH to the directory above instead.
-          ls -lR payload/proot
           (cd payload && zip -qr ../proot-aarch64.zip proot)
           sha256sum proot-aarch64.zip
 
