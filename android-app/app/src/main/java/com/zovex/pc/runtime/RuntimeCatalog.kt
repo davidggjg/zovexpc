@@ -12,10 +12,10 @@ object RuntimeCatalog {
     val WINDOWS_RUNTIME = RuntimeAsset(
         id = "windows-runtime",
         displayNameHe = "מנוע Windows",
-        version = "runtime-9",
-        url = "https://github.com/davidggjg/zovexpc/releases/download/runtime-9/zovex-runtime.zip",
-        sha256 = "ba2c7d5db4346771ed3b3ac846f2412568e5f670437eabea3e0abdc20039da18",
-        sizeBytes = 156_550_250,
+        version = "runtime-10",
+        url = "https://github.com/davidggjg/zovexpc/releases/download/runtime-10/zovex-runtime.zip",
+        sha256 = "95412c404ba60873d38af1cdb6dc3d382d0385ec2b99fbf8f2e2c7c3d2e48456",
+        sizeBytes = 179_489_396,
         licence = "Wine (LGPL-2.1), Box64 (MIT), PRoot (GPL-2.0), Ubuntu base (various)",
         executableDirs = listOf("box64/bin", "wine/bin", "proot/bin"),
         // Unpacked on the device: a Linux rootfs carries modes and special
