@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Power
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Terminal
@@ -54,6 +58,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -135,6 +140,15 @@ fun DesktopScreen() {
     // already running it, which is how a desktop is expected to behave.
     var pendingRun by remember { mutableStateOf<File?>(null) }
 
+    // What is actually on the drive, newest first — the Recommended list
+    // shows real files rather than invented entries.
+    val recentFiles = remember(contentRevision) {
+        layout.downloads.listFiles()
+            ?.filter { it.isFile }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
+    }
+
     val apps = remember(layout) {
         listOf(
             AppEntry("Windows Runtime", Icons.Rounded.Memory, "מנוע Windows") {
@@ -200,8 +214,13 @@ fun DesktopScreen() {
             StartMenu(
                 apps = apps,
                 maxHeight = workHeight,
+                recent = recentFiles,
                 onLaunch = { desktop.open(it.title, it.icon, content = it.content) },
                 onImport = { importer.launch(arrayOf("*/*")) },
+                onOpenRecent = { file ->
+                    desktop.startMenuOpen = false
+                    pendingRun = file
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = TaskbarHeight + 10.dp),
@@ -230,10 +249,30 @@ private fun DesktopIcon(icon: ImageVector, label: String, onOpen: () -> Unit) {
             .width(92.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = label, tint = Color(0xFFE8F3FF), modifier = Modifier.size(30.dp))
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = Color(0xFF0E4D92),
+            modifier = Modifier.size(30.dp),
+        )
         Spacer(Modifier.height(5.dp))
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            Text(label, color = Color.White, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 2)
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                // The wallpaper is pale, so the label carries its own
+                // shadow the way desktop icons do.
+                style = TextStyle(
+                    shadow = Shadow(
+                        color = Color(0xCC00213F),
+                        offset = Offset(0f, 1f),
+                        blurRadius = 4f,
+                    ),
+                ),
+            )
         }
     }
 }
@@ -351,42 +390,46 @@ private fun TaskbarIcon(
 private fun StartMenu(
     apps: List<AppEntry>,
     maxHeight: Dp,
+    recent: List<File>,
     onLaunch: (AppEntry) -> Unit,
     onImport: () -> Unit,
+    onOpenRecent: (File) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
+    var showAll by remember { mutableStateOf(false) }
     val shown = remember(query) {
         if (query.isBlank()) apps
         else apps.filter { it.labelHe.contains(query) || it.title.contains(query, true) }
     }
+    val searching = query.isNotBlank()
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Column(
             modifier = modifier
-                .width(400.dp)
-                .height(minOf(maxHeight - 24.dp, 430.dp))
-                .shadow(28.dp, RoundedCornerShape(10.dp))
+                .width(420.dp)
+                .height(minOf(maxHeight - 20.dp, 520.dp))
+                .shadow(32.dp, RoundedCornerShape(10.dp))
                 .clip(RoundedCornerShape(10.dp))
                 .background(FlyoutFill)
                 .border(1.dp, Hairline, RoundedCornerShape(10.dp))
-                .padding(horizontal = 18.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 18.dp),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(21.dp))
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(Color(0x14FFFFFF))
-                    .border(1.dp, Hairline, RoundedCornerShape(21.dp))
+                    .border(1.dp, Hairline, RoundedCornerShape(20.dp))
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.Search, null, tint = Color(0xFF9A9A9A), modifier = Modifier.size(17.dp))
+                Icon(Icons.Rounded.Search, null, tint = Color(0xFF9A9A9A), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
-                        Text("חיפוש תוכנות וקבצים", color = Color(0xFF9A9A9A), fontSize = 13.sp)
+                        Text("הקלד כאן כדי לחפש", color = Color(0xFF9A9A9A), fontSize = 13.sp)
                     }
                     BasicTextField(
                         value = query,
@@ -399,31 +442,97 @@ private fun StartMenu(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            Text(
-                if (query.isBlank()) "מוצמד" else "תוצאות",
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(18.dp))
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (searching) "תוצאות" else if (showAll) "כל האפליקציות" else "מוצמד",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.weight(1f))
+                if (!searching) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0x14FFFFFF))
+                            .clickable { showAll = !showAll }
+                            .padding(horizontal = 11.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            if (showAll) "חזרה" else "כל האפליקציות",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(if (showAll) "‹" else "›", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(4),
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f, fill = false).heightIn(max = 230.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 items(shown.size) { index ->
                     val app = shown[index]
                     PinnedTile(app.icon, app.labelHe) { onLaunch(app) }
                 }
-                if (query.isBlank()) {
+                if (!searching) {
                     item { PinnedTile(Icons.Rounded.Upload, "ייבוא מהטלפון", onImport) }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            // Recommended: what is actually on the drive, newest first, the
+            // way Windows lists recent files rather than inventing entries.
+            if (!searching && recent.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Text("מומלץ", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    recent.take(4).forEach { file ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { onOpenRecent(file) }
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Rounded.Description,
+                                null,
+                                tint = Color(0xFF9FC6EC),
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    file.name,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                )
+                                Text(
+                                    "%.1f MB".format(file.length() / 1024.0 / 1024.0),
+                                    color = Color(0xFF9A9A9A),
+                                    fontSize = 10.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -432,9 +541,9 @@ private fun StartMenu(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF4CC2FF)),
+                    Modifier.size(30.dp).clip(CircleShape).background(Color(0xFF4CC2FF)),
                     contentAlignment = Alignment.Center,
-                ) { Text("Z", color = Color(0xFF00283A), fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                ) { Text("Z", color = Color(0xFF00283A), fontSize = 15.sp, fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.width(10.dp))
                 Text("ZOVEX", color = Color.White, fontSize = 13.sp)
                 Spacer(Modifier.weight(1f))
