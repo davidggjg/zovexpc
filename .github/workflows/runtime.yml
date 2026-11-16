@@ -174,7 +174,11 @@ jobs:
 
   rootfs_x86:
     runs-on: ubuntu-latest
+    needs: [wine]
     steps:
+      - uses: actions/download-artifact@v4
+        with: { name: wine-x86_64, path: dl/wine }
+
       - name: Fetch the Ubuntu base rootfs for amd64
         run: |
           set -euo pipefail
@@ -183,11 +187,72 @@ jobs:
             | grep -o "ubuntu-base-${UBUNTU_RELEASE}[0-9.]*-base-amd64.tar.gz" \
             | sort -u | tail -1)
           test -n "$name" || { echo "::error::no amd64 base image at $base"; exit 1; }
-          echo "Using $name"
-          curl -fsSL -o rootfs-x86_64.tar.gz "$base/$name"
+          curl -fsSL -o base-amd64.tar.gz "$base/$name"
           curl -fsSL -o SHA256SUMS "$base/SHA256SUMS"
           grep " \*\?${name}\$" SHA256SUMS \
-            | sed "s|[*]\?${name}|rootfs-x86_64.tar.gz|" | sha256sum -c -
+            | sed "s|[*]\?${name}|base-amd64.tar.gz|" | sha256sum -c -
+          mkdir -p tree
+          tar -xzf base-amd64.tar.gz -C tree
+
+      # The base image does not carry Wine's runtime dependencies — ntdll.so
+      # alone needs libunwind, which is not in it. Adding them one per device
+      # test costs a 150 MB download each time, so pull the set in one go and
+      # then verify nothing is left unresolved.
+      - name: Add Wine's runtime libraries
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          mkdir -p debs && cd debs
+          apt-get download -qq \
+            libunwind8 libfreetype6 libfontconfig1 libpng16-16t64 libbrotli1 \
+            libharfbuzz0b libglib2.0-0t64 libgraphite2-3 zlib1g libbz2-1.0 \
+            libx11-6 libxext6 libxrandr2 libxi6 libxcursor1 libxinerama1 \
+            libxcomposite1 libxfixes3 libxrender1 libxcb1 libxau6 libxdmcp6 \
+            libgl1 libglx0 libglvnd0 libegl1 libgbm1 libdrm2 libvulkan1 \
+            libasound2t64 libpulse0 libdbus-1-3 libsystemd0 libudev1 \
+            libgnutls30t64 libp11-kit0 libtasn1-6 libnettle8t64 libhogweed6t64 \
+            libgmp10 libidn2-0 libunistring5 libffi8 \
+            libxml2 libxslt1.1 libicu74 liblzma5 \
+            libusb-1.0-0 libkrb5-3 libk5crypto3 libcom-err2 libkrb5support0 \
+            libkeyutils1 libssl3t64 libcups2t64 libpcap0.8t64 \
+            libgcc-s1 libstdc++6 libmd0 libcap2 liblz4-1 libzstd1 \
+            2>&1 | tail -3 || true
+          cd ..
+          for d in debs/*.deb; do dpkg -x "$d" tree; done
+          echo "libunwind present:"; ls tree/usr/lib/x86_64-linux-gnu/libunwind* 2>/dev/null || echo "  MISSING"
+
+      # Walk what Wine actually links against and fail here, with names, on
+      # anything the tree cannot satisfy.
+      - name: Verify Wine's dependencies resolve
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq binutils unzip
+          mkdir -p winetree && unzip -q dl/wine/wine-x86_64.zip -d winetree
+
+          # Every soname the tree or Wine itself provides.
+          have=$( (find tree -name '*.so*' -printf '%f\n';
+                   find winetree -name '*.so*' -printf '%f\n') | sort -u )
+
+          missing=""
+          while read -r lib; do
+            case "$have" in *"$lib"*) ;; *) missing="$missing $lib" ;; esac
+          done < <(
+            find winetree -name '*.so' -o -type f -name 'wine*' \
+              | while read -r f; do
+                  readelf -d "$f" 2>/dev/null | awk -F'[][]' '/NEEDED/{print $2}'
+                done | sort -u
+          )
+
+          if [ -n "$missing" ]; then
+            echo "::error::Wine needs libraries the x86_64 tree lacks:$missing"
+            exit 1
+          fi
+          echo "All of Wine's dependencies resolve."
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          tar -czf rootfs-x86_64.tar.gz -C tree .
           ls -lh rootfs-x86_64.tar.gz
 
       - uses: actions/upload-artifact@v4
