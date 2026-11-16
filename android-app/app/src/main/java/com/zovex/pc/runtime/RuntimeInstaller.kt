@@ -73,16 +73,16 @@ class RuntimeInstaller(private val root: File) {
             work.deleteRecursively()
             extract(archive, work)
 
-            if (asset.innerTarGz != null) {
+            for ((archive, target) in asset.innerTarballs) {
                 emit(
                     InstallProgress(
                         asset, InstallState.UNPACKING_ROOTFS, null,
-                        "פורס את מערכת הקבצים…",
+                        "פורס את $target…",
                     )
                 )
-                val tarball = File(work, asset.innerTarGz)
-                if (!tarball.isFile) throw IOException("חסר ${asset.innerTarGz} בחבילה")
-                extractTarGz(tarball, File(work, asset.innerTarGzTarget))
+                val tarball = File(work, archive)
+                if (!tarball.isFile) throw IOException("חסר $archive בחבילה")
+                extractTarGz(tarball, File(work, target))
                 // The tarball is a copy of what is now on disk; keeping it
                 // would double the payload's footprint on the device.
                 tarball.delete()

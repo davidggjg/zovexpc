@@ -20,8 +20,14 @@ object RuntimeCatalog {
         executableDirs = listOf("box64/bin", "wine/bin", "proot/bin"),
         // Unpacked on the device: a Linux rootfs carries modes and special
         // files that ZIP cannot represent.
-        innerTarGz = "rootfs.tar.gz",
-        innerTarGzTarget = "rootfs",
+        //
+        // Two trees, not one. Wine is x86_64, so Box64 has to resolve its
+        // libraries against an x86_64 glibc; the arm64 rootfs cannot serve
+        // that, which is why ntdll.so would not load.
+        innerTarballs = mapOf(
+            "rootfs.tar.gz" to "rootfs",
+            "rootfs-x86_64.tar.gz" to "rootfs-x86_64",
+        ),
     )
 
     val all = listOf(WINDOWS_RUNTIME)

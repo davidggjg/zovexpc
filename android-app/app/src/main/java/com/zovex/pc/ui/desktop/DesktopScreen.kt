@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Power
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Upload
@@ -139,6 +140,9 @@ fun DesktopScreen() {
             AppEntry("Windows Runtime", Icons.Rounded.Memory, "מנוע Windows") {
                 RuntimeApp(runtimeRoot) { runtimeRevision++ }
             },
+            AppEntry("Browser", Icons.Rounded.Language, "דפדפן") {
+                BrowserApp(layout) { contentRevision++ }
+            },
             AppEntry("File Explorer", Icons.Rounded.Folder, "סייר הקבצים") {
                 FileExplorerApp(layout, contentRevision) { file ->
                     pendingRun = file
@@ -172,7 +176,13 @@ fun DesktopScreen() {
         ) {
             apps.forEach { app ->
                 DesktopIcon(app.icon, app.labelHe) {
-                    desktop.open(app.title, app.icon, content = app.content)
+                    desktop.open(
+                        app.title,
+                        app.icon,
+                        width = if (app.title == "Browser") 900.dp else 560.dp,
+                        height = if (app.title == "Browser") 620.dp else 380.dp,
+                        content = app.content,
+                    )
                 }
             }
             DesktopIcon(Icons.Rounded.Upload, "ייבוא מהטלפון") {

@@ -104,6 +104,19 @@ class RuntimeLauncher(private val installDir: File) {
                 // Termux binaries look for their libraries at a Termux path
                 // that does not exist here.
                 "LD_LIBRARY_PATH" to prootLibs.absolutePath,
+                // Box64 resolves the x86_64 libraries Wine needs from here.
+                // Without the x86_64 tree it cannot load ntdll.so at all.
+                "BOX64_LD_LIBRARY_PATH" to listOf(
+                    "/zovex/wine/lib/wine/x86_64-unix",
+                    "/zovex/wine/lib",
+                    "/zovex/rootfs-x86_64/usr/lib/x86_64-linux-gnu",
+                    "/zovex/rootfs-x86_64/lib/x86_64-linux-gnu",
+                    "/zovex/rootfs-x86_64/usr/lib",
+                    "/usr/lib/aarch64-linux-gnu",
+                ).joinToString(":"),
+                "BOX64_PATH" to "/zovex/wine/bin",
+                "WINEPREFIX" to "/zovex/wineprefix",
+                "WINEDEBUG" to "-all",
                 "PROOT_TMP_DIR" to File(installDir, "tmp").apply { mkdirs() }.absolutePath,
                 "PROOT_LOADER" to File(installDir, "proot/bin/loader").absolutePath,
                 "HOME" to "/root",

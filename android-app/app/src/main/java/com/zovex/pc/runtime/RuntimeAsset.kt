@@ -19,10 +19,8 @@ data class RuntimeAsset(
     val licence: String,
     /** Paths inside the archive that must be executable after extraction. */
     val executableDirs: List<String> = emptyList(),
-    /** A tarball inside the archive to unpack on the device, if any. */
-    val innerTarGz: String? = null,
-    /** Where that tarball is unpacked, relative to the install directory. */
-    val innerTarGzTarget: String = "rootfs",
+    /** Tarballs inside the archive to unpack on the device: archive to target. */
+    val innerTarballs: Map<String, String> = emptyMap(),
 ) {
     init {
         require(sha256.length == 64) { "sha256 for $id must be 64 hex characters" }

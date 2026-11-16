@@ -172,6 +172,30 @@ jobs:
             wine-x86_64.zip.sha256
           if-no-files-found: error
 
+  rootfs_x86:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch the Ubuntu base rootfs for amd64
+        run: |
+          set -euo pipefail
+          base="https://cdimage.ubuntu.com/ubuntu-base/releases/${UBUNTU_RELEASE}/release"
+          name=$(curl -fsSL "$base/" \
+            | grep -o "ubuntu-base-${UBUNTU_RELEASE}[0-9.]*-base-amd64.tar.gz" \
+            | sort -u | tail -1)
+          test -n "$name" || { echo "::error::no amd64 base image at $base"; exit 1; }
+          echo "Using $name"
+          curl -fsSL -o rootfs-x86_64.tar.gz "$base/$name"
+          curl -fsSL -o SHA256SUMS "$base/SHA256SUMS"
+          grep " \*\?${name}\$" SHA256SUMS \
+            | sed "s|[*]\?${name}|rootfs-x86_64.tar.gz|" | sha256sum -c -
+          ls -lh rootfs-x86_64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-base-amd64
+          path: rootfs-x86_64.tar.gz
+          if-no-files-found: error
+
   # PRoot intercepts syscalls so a glibc process survives Android's seccomp
   # filter. Measured on device: direct execution of rootfs binaries is killed
   # with SIGSYS under every environment tried, so this is not optional.
@@ -288,7 +312,7 @@ jobs:
 
   # Assembles the components into the single payload the app installs.
   payload:
-    needs: [box64, rootfs, wine, proot]
+    needs: [box64, rootfs, rootfs_x86, wine, proot]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -299,6 +323,8 @@ jobs:
         with: { name: wine-x86_64, path: dl/wine }
       - uses: actions/download-artifact@v4
         with: { name: proot-aarch64, path: dl/proot }
+      - uses: actions/download-artifact@v4
+        with: { name: ubuntu-base-amd64, path: dl/rootfs_x86 }
 
       - name: Assemble
         run: |
@@ -309,11 +335,13 @@ jobs:
           # root-owned modes that ZIP cannot represent at all, so unpacking it
           # here would quietly lose them.
           cp dl/rootfs/rootfs.tar.gz tree/rootfs.tar.gz
+          cp dl/rootfs_x86/rootfs-x86_64.tar.gz tree/rootfs-x86_64.tar.gz
           unzip -q dl/box64/box64-aarch64.zip -d tree
           unzip -q dl/wine/wine-x86_64.zip -d tree
           unzip -q dl/proot/proot-aarch64.zip -d tree
           printf '%s\n' \
             'rootfs_archive=rootfs.tar.gz' \
+            'rootfs_x86_archive=rootfs-x86_64.tar.gz' \
             'box64=box64/bin/box64' \
             'wine=wine/bin/wine64' \
             'proot=proot/bin/proot' \
